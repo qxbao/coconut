@@ -1,8 +1,14 @@
 [workspace]
-members = ["core/data_structures"]
+resolver = "3"
+members = ["core/constant","core/crypto","core/data_structures"]
+
+[workspace.package]
+version = "1.0.0"
+authors = ["Orca <qxbao@github.com>"]
+edition = "2024"
+repository = "https://github.com/qxbao/coconut"
 
 [workspace.dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sha2 = "0.10"
-tokio = { version = "1.0", features = ["full"] }
+log = "0.4"
+env_logger = "0.11.8"
+primitive-types = { version = "0.14", features = ["num-traits"] }

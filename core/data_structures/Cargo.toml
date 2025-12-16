@@ -1,7 +1,13 @@
 [package]
-name = "data_structures"
-version = "0.1.0"
-edition = "2024"
+name = "ds"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
-serde.workspace = true
+log = { workspace = true }
+primitive-types = { workspace = true }
+crypto = { path = "../crypto" }
+constant = { path = "../constant" }
+serde = { version = "1.0", features = ["derive"] }
+bincode2 = "2.0.0"

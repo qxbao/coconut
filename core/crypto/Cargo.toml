@@ -1,0 +1,10 @@
+[package]
+name = "crypto"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+primitive-types = { workspace = true }
+log = { workspace = true }
+sha2 = "0.10"
