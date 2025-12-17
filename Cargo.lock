@@ -86,6 +86,9 @@ dependencies = [
 [[package]]
 name = "constant"
 version = "1.0.0"
+dependencies = [
+ "primitive-types",
+]
 
 [[package]]
 name = "cpufeatures"

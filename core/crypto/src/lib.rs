@@ -1,6 +1,12 @@
 use sha2::{Sha256, Digest};
 use primitive_types::U256;
 
+pub fn compute_merkel_root(txs: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(txs);
+    hasher.finalize().into()
+}
+
 pub fn compute_sha256x2(data: &[u8]) -> U256 {
     let mut hasher = Sha256::new();
     hasher.update(data);
