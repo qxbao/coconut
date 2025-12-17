@@ -1,7 +1,10 @@
 pub mod blockchain;
 
 use primitive_types::U256;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +73,7 @@ impl Block {
             .duration_since(time::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
+
         Self {
             header: BlockHeader {
                 version: constant::COCONUT_VERSION,
@@ -100,24 +104,47 @@ impl Block {
 
     pub fn mine(&mut self, target: U256) {
         self.set_merkle_root();
-        let mut header_buffer = bincode2::serialize(&self.header).expect("Failed to serialize transactions");
+        let header_buffer = bincode2::serialize(&self.header).expect("Failed to serialize transactions");
         let nonce_pos = header_buffer.len() - 8;
 
-        loop {
-            let hash_result = crypto::compute_sha256x2(&header_buffer);
-            
-            if hash_result <= target {
-                break;
-            }
+        let found = Arc::new(AtomicBool::new(false));
+        let result_nonce = Arc::new(AtomicU64::new(0));
+        let num_threads = rayon::current_num_threads();
+        let chunk_size: u64 = u64::MAX / num_threads as u64;
 
-            self.header.nonce += 1;
-            header_buffer[nonce_pos..nonce_pos+8].copy_from_slice(&self.header.nonce.to_le_bytes());
-            
-            if self.header.nonce % 10_000_000 == 0 {
-                println!("Mining... Current nonce: {}, Hash: {:x}", self.header.nonce, hash_result);
-            }
-        }
+        println!("Mining with {} threads...", num_threads);
 
+        (0..num_threads).into_par_iter().for_each(|thread_id| {
+            let mut local_header = header_buffer.clone();
+            let start_nonce = thread_id as u64 * chunk_size;
+            let end_nonce = if thread_id == num_threads - 1 {
+                u64::MAX
+            } else {
+                (thread_id as u64 + 1) * chunk_size
+            };
+
+            for nonce in start_nonce..end_nonce {
+                if found.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                local_header[nonce_pos..nonce_pos + 8].copy_from_slice(&nonce.to_le_bytes());
+                let hash_result = crypto::compute_sha256x2(&local_header);
+
+                if hash_result <= target {
+                    found.store(true, Ordering::SeqCst);
+                    result_nonce.store(nonce, Ordering::SeqCst);
+                    println!("Thread {} found solution! Nonce: {}, Hash: {:x}", thread_id, nonce, hash_result);
+                    break;
+                }
+
+                if nonce % 10_000_000 == 0 && thread_id == 0 {
+                    println!("Mining... Thread {}: nonce {}", thread_id, nonce);
+                }
+            }
+        });
+
+        self.header.nonce = result_nonce.load(Ordering::SeqCst);
         println!("Block Mined! Hash: {:x}", self.hash());
     }
 }

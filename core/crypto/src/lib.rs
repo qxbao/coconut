@@ -25,5 +25,5 @@ pub fn to_hex(data: U256) -> String {
         hex_string.push_str(&format!("{:02x}", byte));
     }
 
-    hex_string
+    format!("{:0>width$}", hex_string, width = constant::SHA256_HEX_LEN)
 }

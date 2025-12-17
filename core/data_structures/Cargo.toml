@@ -11,3 +11,4 @@ crypto = { path = "../crypto" }
 constant = { path = "../constant" }
 serde = { version = "1.0", features = ["derive"] }
 bincode2 = "2.0.0"
+rayon = "1.8"

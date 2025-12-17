@@ -17,5 +17,6 @@ pub const BASE_REWARD: u64 = 100 * NUT;
 pub const HALVING_INTERVAL: u64 = 21 * 1e4 as u64;
 pub const QXBAO_ADDRESS: &str = "FILL LATER";
 
-pub const GENESIS_BLOCK_MSG: &str = "See you at the end of the world!";
+pub const GENESIS_BLOCK_MSG: &str = "C u @ da nd of da world!";
 pub const COINBASE_MSG: &str = "Coconut Coinbase Transaction";
+pub const SHA256_HEX_LEN: usize = 64;
