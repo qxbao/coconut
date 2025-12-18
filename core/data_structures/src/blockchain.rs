@@ -1,6 +1,7 @@
 use primitive_types::U256;
 
-use crate::{Block, Transaction};
+use crate::block::{Block};
+use crate::transaction::{Transaction};
 
 pub struct Blockchain {
     pub blocks: Vec<Block>,
@@ -31,7 +32,7 @@ impl Blockchain {
     pub fn reward(&self) -> u64 {
         let chain_len = self.blocks.len() as u64;
         let halve_time = chain_len / constant::HALVING_INTERVAL;
-      
+
         if halve_time >= 64 {
             0
         } else {

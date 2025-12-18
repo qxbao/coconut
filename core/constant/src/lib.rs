@@ -21,8 +21,8 @@ pub const COINBASE_MSG: &str = "Coconut Coinbase Transaction";
 pub const SHA256_HEX_LEN: usize = 64;
 
 // [Genesis Block Data]
-pub const GENESIS_BLOCK_HASH: &str = "00000000513c25cdd070bd21db45dde4aac063983125a68e2360d77f2197c8f0";
-pub const GENESIS_BLOCK_NONCE: u64 = 16909515401595071962;
+pub const GENESIS_BLOCK_HASH: &str = "0000000016b1c7d4793408fbcaaa15bd80b173e9e43830a3756453be452bcc8a";
+pub const GENESIS_BLOCK_NONCE: u64 = 1729382257010256396;
 pub const GENESIS_BLOCK_MSG: &str = "C u @ da nd of da world!";
 pub const GENESIS_BLOCK_PREV_HASH: [u8; 32] = [0u8; 32];
 pub const GENESIS_BLOCK_TIMESTAMP: u64 = 1766042962;
