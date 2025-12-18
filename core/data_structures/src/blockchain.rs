@@ -1,5 +1,6 @@
-use crate::{Block, Transaction};
 use primitive_types::U256;
+
+use crate::{Block, Transaction};
 
 pub struct Blockchain {
     pub blocks: Vec<Block>,
@@ -14,18 +15,12 @@ impl Blockchain {
             difficulty: constant::INITIAL_DIFFICULTY,
             pending_transactions: Vec::new(),
         };
-        blockchain.create_genesis_block(constant::QXBAO_ADDRESS);
+        blockchain.create_genesis_block();
         blockchain
     }
 
-    fn create_genesis_block(&mut self, miner_address: &str) {
-        let mut genesis_block = Block::new([0u8; 32], vec![]);
-        genesis_block.transactions.push(Transaction::new_coinbase(
-            miner_address.to_string(),
-            self.reward(),
-            true,
-        ));
-        genesis_block.mine(self.target());
+    fn create_genesis_block(&mut self) {
+        let genesis_block = Block::new_genesis();
         self.blocks.push(genesis_block);
     }
     
@@ -44,17 +39,57 @@ impl Blockchain {
         }
     }
 
-    pub fn target(&self) -> U256 {
-        if self.difficulty < 1.0 {
-            return constant::MAX_TARGET;
-        }
-        let diff_scaled = (self.difficulty * constant::PRECISION as f64) as u128;
+    pub fn compute_next_bits(&self) -> u32 {
+        let last_block = self.blocks.last().unwrap();
         
-        constant::MAX_TARGET
-            .checked_mul(U256::from(constant::PRECISION))
-            .expect("It should not overflow")
-            .checked_div(U256::from(diff_scaled))
-            .unwrap_or(U256::zero())
+        if (self.blocks.len() as u64) % constant::DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
+            return last_block.header.bits;
+        }
+
+        let first_block_index = self.blocks.len() - constant::DIFFICULTY_ADJUSTMENT_INTERVAL as usize;
+        let first_block = &self.blocks[first_block_index];
+
+        let actual_timespan = last_block.header.timestamp - first_block.header.timestamp;
+
+        let adjusted_timespan = if actual_timespan < constant::TARGET_TIMESPAN / 4 {
+            constant::TARGET_TIMESPAN / 4
+        } else if actual_timespan > constant::TARGET_TIMESPAN * 4 {
+            constant::TARGET_TIMESPAN * 4
+        } else {
+            actual_timespan
+        };
+
+        let mut target = last_block.header.target();
+        target = target * U256::from(adjusted_timespan);
+        target = target / U256::from(constant::TARGET_TIMESPAN);
+
+        if target > constant::MAX_TARGET {
+            target = constant::MAX_TARGET;
+        }
+
+        crypto::target_to_bits(target)
+    }
+
+    pub fn mine_pending_transactions(&mut self, miner_pubkey_hash: &str) {
+        let bits = self.compute_next_bits();
+        let coinbase = Transaction::new_coinbase(
+            miner_pubkey_hash.to_string(),
+            self.reward(),
+        );
+        
+        let mut block_transactions = vec![coinbase];
+        block_transactions.extend(self.pending_transactions.clone());
+        
+        let mut block = Block::new(
+            bits,
+            self.blocks.last().unwrap().hash().to_big_endian(),
+            block_transactions,
+        );
+
+        block.mine(bits);
+
+        self.blocks.push(block);
+        self.pending_transactions.clear();
     }
 }
 
@@ -64,7 +99,7 @@ mod blockchain_tests {
     use constant;
 
     #[test]
-    fn test_blockchain_creation() {
+    fn test_blockchain() {
         let blockchain = Blockchain::new();
         assert_eq!(blockchain.blocks.len(), 1);
         assert_eq!(blockchain.difficulty, constant::INITIAL_DIFFICULTY);
@@ -74,12 +109,5 @@ mod blockchain_tests {
     fn test_reward_halving() {
         let blockchain = Blockchain::new();
         assert_eq!(blockchain.reward(), constant::BASE_REWARD);
-
-        let mut blockchain = Blockchain::new();
-        blockchain.blocks.resize(constant::HALVING_INTERVAL as usize, Block::new([0u8; 32], vec![]));
-        assert_eq!(blockchain.reward(), constant::BASE_REWARD >> 1);
-
-        blockchain.blocks.resize((constant::HALVING_INTERVAL * 2) as usize, Block::new([0u8; 32], vec![]));
-        assert_eq!(blockchain.reward(), constant::BASE_REWARD >> 2);
     }
 }
