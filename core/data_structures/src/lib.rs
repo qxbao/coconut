@@ -107,10 +107,10 @@ impl Block {
         let header_buffer = bincode2::serialize(&self.header).expect("Failed to serialize transactions");
         let nonce_pos = header_buffer.len() - 8;
 
-        let found = Arc::new(AtomicBool::new(false));
+        let is_found = Arc::new(AtomicBool::new(false));
         let result_nonce = Arc::new(AtomicU64::new(0));
-        let num_threads = rayon::current_num_threads();
-        let chunk_size: u64 = u64::MAX / num_threads as u64;
+        let num_threads = rayon::current_num_threads() as u64;
+        let chunk_size: u64 = u64::MAX / num_threads;
 
         println!("Mining with {} threads...", num_threads);
 
@@ -119,12 +119,12 @@ impl Block {
             let start_nonce = thread_id as u64 * chunk_size;
             let end_nonce = if thread_id == num_threads - 1 {
                 u64::MAX
-            } else {
+            } else { 
                 (thread_id as u64 + 1) * chunk_size
             };
 
             for nonce in start_nonce..end_nonce {
-                if found.load(Ordering::Relaxed) {
+                if is_found.load(Ordering::Relaxed) {
                     break;
                 }
 
@@ -132,9 +132,9 @@ impl Block {
                 let hash_result = crypto::compute_sha256x2(&local_header);
 
                 if hash_result <= target {
-                    found.store(true, Ordering::SeqCst);
+                    is_found.store(true, Ordering::SeqCst);
                     result_nonce.store(nonce, Ordering::SeqCst);
-                    println!("Thread {} found solution! Nonce: {}, Hash: {:x}", thread_id, nonce, hash_result);
+                    println!("Thread {} found solution! Nonce: {}, Hash: {}", thread_id, nonce, crypto::to_hex(hash_result));
                     break;
                 }
 
@@ -143,9 +143,10 @@ impl Block {
                 }
             }
         });
-
+        if !is_found.load(Ordering::SeqCst) {
+            panic!("Failed to mine block: no valid nonce found");
+        }
         self.header.nonce = result_nonce.load(Ordering::SeqCst);
-        println!("Block Mined! Hash: {:x}", self.hash());
     }
 }
 
