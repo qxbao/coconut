@@ -9,6 +9,9 @@ log = { workspace = true }
 primitive-types = { workspace = true }
 crypto = { path = "../crypto" }
 constant = { path = "../constant" }
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 bincode2 = "2.0.0"
 rayon = "1.8"
+k256 = "0.13.4"
+hex = { workspace = true }
+rand_core = "0.9.3"

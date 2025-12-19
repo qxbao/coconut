@@ -1,4 +1,5 @@
 use primitive_types::U256;
+use serde::{Deserialize, Serialize};
 
 pub const COCONUT_VERSION: u32 = 1;
 
@@ -15,7 +16,7 @@ pub const PRECISION: u128 = 100_000_000u128;
 
 pub const BASE_REWARD: u64 = 100 * NUT;
 pub const HALVING_INTERVAL: u64 = 21 * 1e4 as u64;
-pub const QXBAO_ADDRESS: &str = "FILL LATER";
+pub const QXBAO_ADDRESS: &str = "1HwKr3zhCNMhE8WaUNsiREbcykYqCq6yeV";
 
 pub const COINBASE_MSG: &str = "Coconut Coinbase Transaction";
 pub const SHA256_HEX_LEN: usize = 64;
@@ -30,3 +31,25 @@ pub const GENESIS_BLOCK_TIMESTAMP: u64 = 1766042962;
 pub const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 10;
 pub const EXPECTED_BLOCK_TIME: u64 = 60;
 pub const TARGET_TIMESPAN: u64 = DIFFICULTY_ADJUSTMENT_INTERVAL * EXPECTED_BLOCK_TIME;
+
+pub mod address {
+    pub const MAINNET_PREFIX: u8 = 0x4C;
+    pub const TESTNET_PREFIX: u8 = 0x8C;
+} 
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum BitcoinNetwork {
+    Mainnet,
+    Testnet,
+}
+
+impl BitcoinNetwork {
+    pub fn p2pkh_prefix(&self) -> u8 {
+        match self {
+            BitcoinNetwork::Mainnet => 0x00,
+            BitcoinNetwork::Testnet => 0x6F,
+        }
+    }
+}
+
+pub const NETWORK_TYPE: BitcoinNetwork = BitcoinNetwork::Mainnet;

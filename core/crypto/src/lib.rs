@@ -1,3 +1,4 @@
+use ripemd::Ripemd160;
 use sha2::{Sha256, Digest};
 use primitive_types::U256;
 
@@ -68,4 +69,33 @@ pub fn bits_to_target(bits: u32) -> U256 {
     } else {
         U256::from(coefficient) << (8 * (exponent - 3))
     }
+}
+
+pub fn hash_public_key(pubkey_bytes: &[u8]) -> [u8; 20] {
+    let mut sha256_hasher = Sha256::new();
+    sha256_hasher.update(pubkey_bytes);
+    let sha256_result = sha256_hasher.finalize();
+
+    let mut ripemd_hasher = Ripemd160::new();
+    ripemd_hasher.update(sha256_result);
+    
+    let mut address_hash = [0u8; 20];
+    address_hash.copy_from_slice(&ripemd_hasher.finalize());
+    
+    address_hash
+}
+
+pub fn pubkey_hash_to_address(pubkey_hash: &[u8; 20], network: &constant::BitcoinNetwork) -> String {
+    let version_byte: u8 = network.p2pkh_prefix();
+    
+    let mut payload = Vec::with_capacity(25);
+    payload.push(version_byte);
+    payload.extend_from_slice(pubkey_hash);
+
+    let first_sha = Sha256::digest(&payload);
+    let second_sha = Sha256::digest(&first_sha);
+    let checksum = &second_sha[0..4];
+
+    payload.extend_from_slice(checksum);
+    bs58::encode(payload).into_string()
 }
