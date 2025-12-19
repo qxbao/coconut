@@ -1,12 +1,13 @@
 use primitive_types::U256;
 
-use crate::block::{Block};
-use crate::transaction::{Transaction};
+use crate::block::Block;
+use crate::transaction::{self, Transaction};
 
 pub struct Blockchain {
     pub blocks: Vec<Block>,
     pub difficulty: f64,
     pub pending_transactions: Vec<Transaction>,
+    pub utxo_set: transaction::UTXOSet,
 }
 
 impl Blockchain {
@@ -15,6 +16,7 @@ impl Blockchain {
             blocks: Vec::new(),
             difficulty: constant::INITIAL_DIFFICULTY,
             pending_transactions: Vec::new(),
+            utxo_set: transaction::UTXOSet::new(),
         };
         blockchain.create_genesis_block();
         blockchain
@@ -24,7 +26,7 @@ impl Blockchain {
         let genesis_block = Block::new_genesis();
         self.blocks.push(genesis_block);
     }
-    
+
     pub fn add_transaction(&mut self, tx: Transaction) {
         self.pending_transactions.push(tx);
     }
@@ -42,12 +44,13 @@ impl Blockchain {
 
     pub fn compute_next_bits(&self) -> u32 {
         let last_block = self.blocks.last().unwrap();
-        
+
         if (self.blocks.len() as u64) % constant::DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
             return last_block.header.bits;
         }
 
-        let first_block_index = self.blocks.len() - constant::DIFFICULTY_ADJUSTMENT_INTERVAL as usize;
+        let first_block_index =
+            self.blocks.len() - constant::DIFFICULTY_ADJUSTMENT_INTERVAL as usize;
         let first_block = &self.blocks[first_block_index];
 
         let actual_timespan = last_block.header.timestamp - first_block.header.timestamp;
@@ -71,16 +74,13 @@ impl Blockchain {
         crypto::target_to_bits(target)
     }
 
-    pub fn mine_pending_transactions(&mut self, miner_pubkey_hash: &str) {
+    pub fn mine_pending_transactions(&mut self, miner_pubkey_hash: &[u8; 20]) {
         let bits = self.compute_next_bits();
-        let coinbase = Transaction::new_coinbase(
-            miner_pubkey_hash.to_string(),
-            self.reward(),
-        );
-        
+        let coinbase = Transaction::new_coinbase(*miner_pubkey_hash, self.reward());
+
         let mut block_transactions = vec![coinbase];
         block_transactions.extend(self.pending_transactions.clone());
-        
+
         let mut block = Block::new(
             bits,
             self.blocks.last().unwrap().hash().to_big_endian(),
@@ -92,6 +92,33 @@ impl Blockchain {
         self.blocks.push(block);
         self.pending_transactions.clear();
     }
+
+    pub fn verify_chain(&self) -> bool {
+        for i in 0..self.blocks.len() {
+            if i == 0 {
+                if self.blocks[i].hash().to_string() != constant::GENESIS_BLOCK_HASH
+                    || self.blocks[i].verify() == false
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            let current_block = &self.blocks[i];
+            let previous_block = &self.blocks[i - 1];
+
+            if current_block.header.prev_hash != previous_block.hash().to_big_endian() {
+                return false;
+            }
+
+            let target = current_block.header.target();
+            let block_hash = current_block.hash();
+            if block_hash > target || !current_block.verify() {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 #[cfg(test)]
@@ -102,6 +129,7 @@ mod blockchain_tests {
     #[test]
     fn test_blockchain() {
         let blockchain = Blockchain::new();
+        assert!(blockchain.verify_chain());
         assert_eq!(blockchain.blocks.len(), 1);
         assert_eq!(blockchain.difficulty, constant::INITIAL_DIFFICULTY);
     }

@@ -53,7 +53,7 @@ impl Block {
 
     pub fn new_genesis() -> Self {
         let genesis_coinbase = Transaction::new_coinbase(
-            constant::QXBAO_ADDRESS.to_string(),
+            crypto::address_to_pubkey_hash(&constant::QXBAO_ADDRESS).expect("Invalid Genesis address"),
             constant::BASE_REWARD,
         );
         
@@ -139,7 +139,7 @@ impl Block {
         self.header.nonce = result_nonce.load(Ordering::Acquire);
     }
 
-    pub fn verify(&self, prev_block: Option<&Block>) -> bool {
+    pub fn verify(&self) -> bool {
         let hash = self.hash();
         let target = self.header.target();
 
@@ -157,11 +157,7 @@ impl Block {
             return false;
         }
 
-        if let Some(prev) = prev_block {
-            if self.header.prev_hash != prev.hash().to_big_endian() {
-                return false;
-            }
-        }
+        // TODO: Verify transactions
         true
     }
 }
@@ -186,7 +182,7 @@ mod block_tests {
     #[test]
     fn test_genesis_block_validation() {
         let genesis_block = Block::new_genesis();
-        assert!(genesis_block.verify(None));
+        assert!(genesis_block.verify());
     }
 
     #[test]
@@ -206,6 +202,6 @@ mod block_tests {
         let mut genesis_block = Block::new_genesis();
         genesis_block.header.nonce += 1;
         
-        assert!(!genesis_block.verify(None), "Modified genesis block should be invalid");
+        assert!(!genesis_block.verify(), "Modified genesis block should be invalid");
     }
 }

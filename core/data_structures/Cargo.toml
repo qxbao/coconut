@@ -15,3 +15,4 @@ rayon = "1.8"
 k256 = "0.13.4"
 hex = { workspace = true }
 rand_core = "0.9.3"
+serde-big-array = { workspace = true }

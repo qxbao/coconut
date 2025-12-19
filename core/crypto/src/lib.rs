@@ -99,3 +99,17 @@ pub fn pubkey_hash_to_address(pubkey_hash: &[u8; 20], network: &constant::Bitcoi
     payload.extend_from_slice(checksum);
     bs58::encode(payload).into_string()
 }
+
+pub fn address_to_pubkey_hash(address: &str) -> Result<[u8; 20], String> {
+    let decoded = bs58::decode(address)
+        .into_vec()
+        .map_err(|_| "Invalid Base58")?;
+    
+    if decoded.len() != 25 {
+        return Err("Invalid address length".into());
+    }
+    
+    let mut hash = [0u8; 20];
+    hash.copy_from_slice(&decoded[1..21]);
+    Ok(hash)
+}

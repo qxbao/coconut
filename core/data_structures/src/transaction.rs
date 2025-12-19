@@ -1,19 +1,22 @@
-use std::collections::HashMap;
 use k256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxInput {
     pub txid: [u8; 32],
     pub out_idx: u32,
-    pub signature: Vec<u8>,
-    pub public_key: Vec<u8>,
+    #[serde(with = "BigArray")]
+    pub signature: [u8; 72],
+    #[serde(with = "BigArray")]
+    pub public_key: [u8; 33],
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxOutput {
     pub value: u64,
-    pub pubkey_hash: String,
+    pub address: [u8; 20],
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -32,12 +35,12 @@ impl Transaction {
         }
     }
 
-    pub fn new_coinbase(receiver_pubkey_hash: String, amount: u64) -> Self {
+    pub fn new_coinbase(receiver_address: [u8; 20], amount: u64) -> Self {
         Self {
             inputs: vec![],
             outputs: vec![TxOutput {
                 value: amount,
-                pubkey_hash: receiver_pubkey_hash,
+                address: receiver_address,
             }],
             lock_time: 0,
         }
@@ -52,7 +55,7 @@ impl Transaction {
     pub fn hash_for_signature(&self) -> [u8; 32] {
         let mut tx_copy = self.clone();
         for input in &mut tx_copy.inputs {
-            input.signature = vec![];
+            input.signature = [0u8; 72];
         }
         let serialized = bincode2::serialize(&tx_copy).expect("Serialization failed");
         let hash = crypto::compute_sha256x2(&serialized);
@@ -60,47 +63,70 @@ impl Transaction {
     }
 
     pub fn verify(&self, utxo_set: &UTXOSet) -> Result<(), String> {
+        // TODO: Xử lý giao dịch có phí bằng 0
         if self.is_coinbase() {
             return Ok(());
         }
 
-        if self.inputs.is_empty() {
-            return Err("Non-coinbase transaction must have inputs".into());
+        if self.inputs.is_empty() || self.outputs.is_empty() {
+            return Err("Non-coinbase transaction must have inputs and outputs".into());
+        }
+        let mut output_sum = 0u64;
+        for output in &self.outputs {
+            if output.value == 0 {
+                return Err("Transaction output value must be greater than zero".into());
+            }
+            output_sum = output_sum
+                .checked_add(output.value)
+                .ok_or("Output sum overflowed u64")?;
         }
 
         let message_hash = self.hash_for_signature();
-        let mut input_sum = 0u64;
 
-        for input in &self.inputs {
-            let utxo = utxo_set.utxos
+        let input_sum = self.inputs.iter().try_fold(0u64, |acc, input| {
+            let utxo = utxo_set
+                .utxos
                 .get(&input.txid)
                 .and_then(|outputs| outputs.iter().find(|(idx, _)| *idx == input.out_idx))
-                .ok_or(format!("UTXO not found for txid: {}", hex::encode(input.txid)))?;
+                .ok_or_else(|| format!("UTXO not found for txid: {}", hex::encode(input.txid)))?;
 
             let calculated_hash = crypto::hash_public_key(&input.public_key);
-            if hex::encode(&calculated_hash) != utxo.1.pubkey_hash {
+            if calculated_hash != utxo.1.address {
                 return Err("Signature belongs to a public key that doesn't own this UTXO".into());
             }
 
             self.verify_input_signature(input, &message_hash)?;
 
-            input_sum += utxo.1.value;
-        }
+            acc.checked_add(utxo.1.value)
+                .ok_or_else(|| "Input sum overflowed u64".to_string())
+        })?;
 
-        let output_sum: u64 = self.outputs.iter().map(|o| o.value).sum();
+        let output_sum = self.outputs.iter().try_fold(0u64, |acc, output| {
+            acc.checked_add(output.value)
+                .ok_or_else(|| "Output sum overflowed u64".to_string())
+        })?;
+
         if input_sum < output_sum {
-            return Err(format!("Insufficient funds: input {} < output {}", input_sum, output_sum));
+            return Err(format!(
+                "Insufficient funds: input {} < output {}",
+                input_sum, output_sum
+            ));
         }
 
         Ok(())
     }
 
-    fn verify_input_signature(&self, input: &TxInput, message_hash: &[u8; 32]) -> Result<(), String> {
+    fn verify_input_signature(
+        &self,
+        input: &TxInput,
+        message_hash: &[u8; 32],
+    ) -> Result<(), String> {
+        let signature =
+            Signature::from_slice(&input.signature).map_err(|_| "Invalid signature format")?;
+
         let verifying_key = VerifyingKey::from_sec1_bytes(&input.public_key)
             .map_err(|_| "Invalid public key format")?;
-        
-        let signature = Signature::from_der(&input.signature)
-            .map_err(|_| "Invalid signature format")?;
+
         verifying_key
             .verify(message_hash, &signature)
             .map_err(|_| "Signature verification failed".to_string())
@@ -138,13 +164,12 @@ impl UTXOSet {
         None
     }
 
-    pub fn get_balance(&self, pubkey_hash: &str) -> u64 {
+    pub fn get_balance(&self, pubkey_hash: &[u8; 20]) -> u64 {
         self.utxos
             .values()
             .flatten()
-            .filter(|(_, output)| output.pubkey_hash == pubkey_hash)
+            .filter(|(_, output)| output.address == *pubkey_hash)
             .map(|(_, output)| output.value)
             .sum()
     }
 }
-

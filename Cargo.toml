@@ -14,3 +14,4 @@ env_logger = "0.11.8"
 primitive-types = { version = "0.14", features = ["num-traits"] }
 hex = "0.4.3"
 serde = { version = "1.0", features = ["derive"] }
+serde-big-array = "0.5.1"
