@@ -17,14 +17,6 @@ pub struct BlockHeader {
     pub nonce: u64,
 }
 
-impl BlockHeader {
-    pub fn target(&self) -> U256 {
-        let exponent = (self.bits >> 24) as u32;
-        let coefficient = (self.bits & 0x00ffffff) as u64;
-        U256::from(coefficient) << (8 * (exponent - 3))
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
     pub header: BlockHeader,
@@ -141,13 +133,14 @@ impl Block {
 
     pub fn verify(&self) -> bool {
         let hash = self.hash();
-        let target = self.header.target();
+        let target = crypto::bits_to_target(self.header.bits);
 
         if target.is_zero() {
             return false;
         }
 
         if hash > target {
+            println!("Block hash does not meet the target requirement. Hash: {}, Target: {}", crypto::to_hex(hash), crypto::to_hex(target));
             return false;
         }
 
@@ -166,6 +159,7 @@ impl Block {
 mod block_tests {
     use super::*;
     #[test]
+    #[ignore = "Heavy mining test - run with `cargo test -- --ignored`"]
     fn test_genesis_block_mining() {
         let mut genesis_block = Block::new_genesis();
         let bits = crypto::target_to_bits(constant::MAX_TARGET);

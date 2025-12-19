@@ -63,7 +63,7 @@ impl Blockchain {
             actual_timespan
         };
 
-        let mut target = last_block.header.target();
+        let mut target = crypto::bits_to_target(last_block.header.bits);
         target = target * U256::from(adjusted_timespan);
         target = target / U256::from(constant::TARGET_TIMESPAN);
 
@@ -96,7 +96,7 @@ impl Blockchain {
     pub fn verify_chain(&self) -> bool {
         for i in 0..self.blocks.len() {
             if i == 0 {
-                if self.blocks[i].hash().to_string() != constant::GENESIS_BLOCK_HASH
+                if crypto::to_hex(self.blocks[i].hash()) != constant::GENESIS_BLOCK_HASH
                     || self.blocks[i].verify() == false
                 {
                     return false;
@@ -111,7 +111,7 @@ impl Blockchain {
                 return false;
             }
 
-            let target = current_block.header.target();
+            let target = crypto::bits_to_target(current_block.header.bits);
             let block_hash = current_block.hash();
             if block_hash > target || !current_block.verify() {
                 return false;
