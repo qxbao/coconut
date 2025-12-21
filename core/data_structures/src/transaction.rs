@@ -63,13 +63,12 @@ impl Transaction {
     }
 
     pub fn verify(&self, utxo_set: &UTXOSet) -> Result<(), String> {
-        // TODO: Xử lý giao dịch có phí bằng 0
         if self.is_coinbase() {
             return Ok(());
         }
 
         if self.inputs.is_empty() || self.outputs.is_empty() {
-            return Err("Non-coinbase transaction must have inputs and outputs".into());
+            return Err("Transaction must have at least one input and one output".into());
         }
         let mut output_sum = 0u64;
         for output in &self.outputs {

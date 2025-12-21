@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time;
+use crate::error;
 use crate::transaction::Transaction;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -64,14 +65,14 @@ impl Block {
         gb
     }
 
-    pub fn set_merkle_root(&mut self) {
+    fn set_merkle_root(&mut self) {
         let serialized =
             bincode2::serialize(&self.transactions).expect("Failed to serialize transactions");
         let root = crypto::compute_merkel_root(&serialized);
         self.header.merkle_root = root
     }
 
-    pub fn header_bin(&self) -> Vec<u8> {
+    fn header_bin(&self) -> Vec<u8> {
         bincode2::serialize(&self.header).expect("Failed to serialize block")
     }
 
@@ -80,7 +81,7 @@ impl Block {
         crypto::compute_sha256x2(&serialized)
     }
 
-    pub fn mine(&mut self, bits: u32) {
+    pub fn mine(&mut self, bits: u32) -> Result<(), error::BlockchainError> {
         self.set_merkle_root();
         let header_buffer = bincode2::serialize(&self.header).expect("Failed to serialize transactions");
         let nonce_pos = header_buffer.len() - 8;
@@ -126,9 +127,10 @@ impl Block {
         });
         if !is_found.load(Ordering::Acquire) {
             // TODO: Thay đổi strategy nếu không tìm thấy nonce hợp lệ (tăng time) hoặc return Result<(), MiningError>
-            panic!("Failed to mine block: no valid nonce found");
+            return Err(error::BlockchainError::MiningFailed);
         }
         self.header.nonce = result_nonce.load(Ordering::Acquire);
+        Ok(())
     }
 
     pub fn verify(&self) -> bool {
@@ -163,7 +165,7 @@ mod block_tests {
     fn test_genesis_block_mining() {
         let mut genesis_block = Block::new_genesis();
         let bits = crypto::target_to_bits(constant::MAX_TARGET);
-        genesis_block.mine(bits);
+        genesis_block.mine(bits).expect("Failed to mine genesis block");
         let hash = genesis_block.hash();
         let target = crypto::bits_to_target(bits);
         println!("Block information: {:?}", genesis_block);

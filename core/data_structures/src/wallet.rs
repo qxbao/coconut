@@ -1,3 +1,6 @@
+// This module should be isolated from the internet/networking aspects
+// In order to work as a cold wallet.
+
 use k256::{
     PublicKey, SecretKey,
     ecdsa::{Signature, SigningKey, signature::SignerMut},

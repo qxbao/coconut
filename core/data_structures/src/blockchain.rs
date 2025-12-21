@@ -1,12 +1,14 @@
 use primitive_types::U256;
 
 use crate::block::Block;
+use crate::error::BlockchainError;
+use crate::mempool::Mempool;
 use crate::transaction::{self, Transaction};
 
 pub struct Blockchain {
     pub blocks: Vec<Block>,
     pub difficulty: f64,
-    pub pending_transactions: Vec<Transaction>,
+    pub mempool: Mempool,
     pub utxo_set: transaction::UTXOSet,
 }
 
@@ -15,7 +17,7 @@ impl Blockchain {
         let mut blockchain = Blockchain {
             blocks: Vec::new(),
             difficulty: constant::INITIAL_DIFFICULTY,
-            pending_transactions: Vec::new(),
+            mempool: Mempool::new(10000),
             utxo_set: transaction::UTXOSet::new(),
         };
         blockchain.create_genesis_block();
@@ -27,8 +29,28 @@ impl Blockchain {
         self.blocks.push(genesis_block);
     }
 
-    pub fn add_transaction(&mut self, tx: Transaction) {
-        self.pending_transactions.push(tx);
+    pub fn add_transaction(&mut self, tx: Transaction) -> Result<(), String> {
+        let fee = self.calculate_transaction_fee(&tx);
+        self.mempool.add_transaction(tx, fee)
+    }
+
+    fn calculate_transaction_fee(&self, tx: &Transaction) -> u64 {
+        if tx.is_coinbase() {
+            return 0;
+        }
+        let input_sum: u64 = tx
+            .inputs
+            .iter()
+            .filter_map(|input| {
+                self.utxo_set
+                    .utxos
+                    .get(&input.txid)
+                    .and_then(|outputs| outputs.iter().find(|(idx, _)| *idx == input.out_idx))
+                    .map(|(_, output)| output.value)
+            })
+            .sum();
+        let output_sum: u64 = tx.outputs.iter().map(|o| o.value).sum();
+        input_sum.saturating_sub(output_sum)
     }
 
     pub fn reward(&self) -> u64 {
@@ -42,7 +64,7 @@ impl Blockchain {
         }
     }
 
-    pub fn compute_next_bits(&self) -> u32 {
+    fn compute_next_bits(&self) -> u32 {
         let last_block = self.blocks.last().unwrap();
 
         if (self.blocks.len() as u64) % constant::DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
@@ -74,12 +96,32 @@ impl Blockchain {
         crypto::target_to_bits(target)
     }
 
-    pub fn mine_pending_transactions(&mut self, miner_pubkey_hash: &[u8; 20]) {
-        let bits = self.compute_next_bits();
-        let coinbase = Transaction::new_coinbase(*miner_pubkey_hash, self.reward());
+    pub fn mine_pending_transactions(
+        &mut self,
+        miner_pubkey_hash: &[u8; 20],
+        max_txs: usize,
+    ) -> Result<(), BlockchainError> {
+        // 1. Lấy đề xuất kèm phí
+        let pending_data = self.mempool.get_proposals(max_txs);
+        if pending_data.is_empty() {
+            return Err(BlockchainError::InvalidTransaction("No pending txs".into()));
+        }
 
-        let mut block_transactions = vec![coinbase];
-        block_transactions.extend(self.pending_transactions.clone());
+        // 2. Verify trước khi đào (Fail-fast)
+        for (tx, _) in &pending_data {
+            tx.verify(&self.utxo_set)
+                .map_err(|e| BlockchainError::InvalidTransaction(e))?;
+        }
+
+        let bits = self.compute_next_bits();
+        let total_fees = Self::calculate_total_fees(&pending_data);
+        let coinbase = Transaction::new_coinbase(*miner_pubkey_hash, self.reward() + total_fees);
+
+        // 3. Chuẩn bị transactions cho Block
+        let mut block_transactions = Vec::with_capacity(pending_data.len() + 1);
+        block_transactions.push(coinbase);
+        // Move hoặc Clone dữ liệu vào block
+        block_transactions.extend(pending_data.iter().map(|(tx, _)| tx.clone()));
 
         let mut block = Block::new(
             bits,
@@ -87,10 +129,39 @@ impl Blockchain {
             block_transactions,
         );
 
-        block.mine(bits);
+        // 4. Mining (CPU intensive)
+        block
+            .mine(bits)
+            .map_err(|_| BlockchainError::MiningFailed)?;
 
+        // 5. Chính xác: Xóa những txid đã được đóng vào block này
+        let mined_txids: Vec<[u8; 32]> = pending_data.iter().map(|(tx, _)| tx.hash()).collect();
+        self.mempool.remove_confirmed(&mined_txids);
+
+        // 6. Cập nhật trạng thái
+        self.update_utxo_set(&block);
         self.blocks.push(block);
-        self.pending_transactions.clear();
+
+        Ok(())
+    }
+
+    fn update_utxo_set(&mut self, block: &Block) {
+        for tx in &block.transactions {
+            // Remove spent UTXOs
+            for input in &tx.inputs {
+                self.utxo_set.spend_utxo(input.txid, input.out_idx);
+            }
+
+            // Add new UTXOs
+            let txid = tx.hash();
+            for (idx, output) in tx.outputs.iter().enumerate() {
+                self.utxo_set.add_utxo(txid, idx as u32, output.clone());
+            }
+        }
+    }
+
+    fn calculate_total_fees(pending_data: &[(Transaction, u64)]) -> u64 {
+        pending_data.iter().map(|(_, fee)| fee).sum()
     }
 
     pub fn verify_chain(&self) -> bool {
