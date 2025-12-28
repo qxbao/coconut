@@ -24,18 +24,20 @@ pub struct Transaction {
     pub inputs: Vec<TxInput>,
     pub outputs: Vec<TxOutput>,
     pub lock_time: u32,
+    pub message: Option<String>,
 }
 
 impl Transaction {
-    pub fn new(inputs: Vec<TxInput>, outputs: Vec<TxOutput>, lock_time: u32) -> Self {
+    pub fn new(inputs: Vec<TxInput>, outputs: Vec<TxOutput>, lock_time: u32, message: Option<String>) -> Self {
         Self {
             inputs,
             outputs,
             lock_time,
+            message,
         }
     }
 
-    pub fn new_coinbase(receiver_address: [u8; 20], amount: u64) -> Self {
+    pub fn new_coinbase(receiver_address: [u8; 20], amount: u64, message: Option<String>) -> Self {
         Self {
             inputs: vec![],
             outputs: vec![TxOutput {
@@ -43,6 +45,7 @@ impl Transaction {
                 address: receiver_address,
             }],
             lock_time: 0,
+            message,
         }
     }
 

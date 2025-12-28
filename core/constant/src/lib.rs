@@ -22,8 +22,8 @@ pub const COINBASE_MSG: &str = "Coconut Coinbase Transaction";
 pub const SHA256_HEX_LEN: usize = 64;
 
 // [Genesis Block Data]
-pub const GENESIS_BLOCK_HASH: &str = "00000000a3e4c1fa9f89d80fd6778e9334b5b0a903b34c0d5cbc23113dc587f5";
-pub const GENESIS_BLOCK_NONCE: u64 = 14411518807672663893;
+pub const GENESIS_BLOCK_HASH: &str = "00000000a6adca384b71bd444b637e0d3005ea10bdf90f9b82262a45d5b8ab69";
+pub const GENESIS_BLOCK_NONCE: u64 = 5188146770857761328;
 pub const GENESIS_BLOCK_MSG: &str = "C u @ da nd of da world!";
 pub const GENESIS_BLOCK_PREV_HASH: [u8; 32] = [0u8; 32];
 pub const GENESIS_BLOCK_TIMESTAMP: u64 = 1766042962;
@@ -31,6 +31,9 @@ pub const GENESIS_BLOCK_TIMESTAMP: u64 = 1766042962;
 pub const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 10;
 pub const EXPECTED_BLOCK_TIME: u64 = 60;
 pub const TARGET_TIMESPAN: u64 = DIFFICULTY_ADJUSTMENT_INTERVAL * EXPECTED_BLOCK_TIME;
+
+// [Mining Logic Constants]
+pub const MINING_THREAD_BREAK_INTERVAL: u64 = 1023;
 
 pub mod address {
     pub const MAINNET_PREFIX: u8 = 0x4C;

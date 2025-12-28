@@ -27,6 +27,8 @@ impl Blockchain {
     fn create_genesis_block(&mut self) {
         let genesis_block = Block::new_genesis();
         self.blocks.push(genesis_block);
+        let genesis_block = self.blocks.last().expect("genesis block must exist").clone();
+        self.update_utxo_set(&genesis_block);
     }
 
     pub fn add_transaction(&mut self, tx: Transaction) -> Result<(), String> {
@@ -100,6 +102,7 @@ impl Blockchain {
         &mut self,
         miner_pubkey_hash: &[u8; 20],
         max_txs: usize,
+        message: Option<String>,
     ) -> Result<(), BlockchainError> {
         // 1. Lấy đề xuất kèm phí
         let pending_data = self.mempool.get_proposals(max_txs);
@@ -115,7 +118,8 @@ impl Blockchain {
 
         let bits = self.compute_next_bits();
         let total_fees = Self::calculate_total_fees(&pending_data);
-        let coinbase = Transaction::new_coinbase(*miner_pubkey_hash, self.reward() + total_fees);
+        let coinbase =
+            Transaction::new_coinbase(*miner_pubkey_hash, self.reward() + total_fees, message);
 
         // 3. Chuẩn bị transactions cho Block
         let mut block_transactions = Vec::with_capacity(pending_data.len() + 1);
@@ -164,7 +168,7 @@ impl Blockchain {
         pending_data.iter().map(|(_, fee)| fee).sum()
     }
 
-    pub fn verify_chain(&self) -> bool {
+    pub fn verify(&self) -> bool {
         for i in 0..self.blocks.len() {
             if i == 0 {
                 if crypto::to_hex(self.blocks[i].hash()) != constant::GENESIS_BLOCK_HASH
@@ -200,7 +204,7 @@ mod blockchain_tests {
     #[test]
     fn test_blockchain() {
         let blockchain = Blockchain::new();
-        assert!(blockchain.verify_chain());
+        assert!(blockchain.verify());
         assert_eq!(blockchain.blocks.len(), 1);
         assert_eq!(blockchain.difficulty, constant::INITIAL_DIFFICULTY);
     }

@@ -9,6 +9,9 @@ pub enum BlockchainError {
     InsufficientFunds,
     InvalidSignature,
     DatabaseError(String),
+    SerializationError(String),
+    DuplicateBlock,
+    OrphanBlock,
 }
 
 impl fmt::Display for BlockchainError {
@@ -21,6 +24,9 @@ impl fmt::Display for BlockchainError {
             BlockchainError::InsufficientFunds => write!(f, "Insufficient funds"),
             BlockchainError::InvalidSignature => write!(f, "Invalid signature"),
             BlockchainError::DatabaseError(msg) => write!(f, "Database error: {}", msg),
+            BlockchainError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
+            BlockchainError::DuplicateBlock => write!(f, "Duplicate block"),
+            BlockchainError::OrphanBlock => write!(f, "Orphan block"),
         }
     }
 }

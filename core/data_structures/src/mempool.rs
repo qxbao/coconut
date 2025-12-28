@@ -48,7 +48,8 @@ impl Mempool {
     }
 
     pub fn get_proposals(&self, max_count: usize) -> Vec<(Transaction, u64)> {
-        self.priority_queue.iter()
+        self.priority_queue
+            .iter()
             .take(max_count)
             .map(|ptx| (ptx.tx.clone(), ptx.total_fee))
             .collect()
@@ -84,8 +85,26 @@ impl Mempool {
         let tx_size = bincode2::serialize(&tx).unwrap().len() as u64;
         let fee_per_byte = fee / tx_size;
 
+        if self.transactions.len() >= self.max_size {
+            if let Some(lowest) = self.priority_queue.peek() {
+                if fee_per_byte <= lowest.fee_per_byte {
+                    return Err(format!(
+                        "Transaction rejected: fee of {} per byte is too low. Mempool is full and minimum required fee is {} per byte",
+                        fee_per_byte,
+                        lowest.fee_per_byte
+                    ));
+                }
+                let to_remove = self.priority_queue.pop().unwrap();
+                self.transactions.remove(&to_remove.tx.hash());
+            }
+        }
+
         self.transactions.insert(txid, tx.clone());
-        self.priority_queue.push(PrioritizedTx { tx, fee_per_byte, total_fee: fee });
+        self.priority_queue.push(PrioritizedTx {
+            tx,
+            fee_per_byte,
+            total_fee: fee,
+        });
 
         Ok(())
     }

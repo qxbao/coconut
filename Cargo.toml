@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core/constant","core/crypto","core/data_structures"]
+members = ["core/constant","core/crypto","core/data_structures","core/storage"]
 
 [workspace.package]
 version = "1.0.0"

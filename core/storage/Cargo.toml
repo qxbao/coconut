@@ -1,0 +1,18 @@
+[package]
+name = "storage"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rocksdb = "0.24.0"
+bincode2 = "2.0"
+
+# Local dependencies
+ds = { path = "../data_structures" }
+serde = { workspace: true }
+primitive-types = { workspace: true }
+crypto = { path = "../crypto" }
+constant = { path = "../constant" }
+
+[dev-dependencies]
+tempfile = "3.8"

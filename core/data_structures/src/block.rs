@@ -1,12 +1,11 @@
-
+use crate::error;
+use crate::transaction::Transaction;
 use primitive_types::U256;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time;
-use crate::error;
-use crate::transaction::Transaction;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockHeader {
@@ -46,10 +45,12 @@ impl Block {
 
     pub fn new_genesis() -> Self {
         let genesis_coinbase = Transaction::new_coinbase(
-            crypto::address_to_pubkey_hash(&constant::QXBAO_ADDRESS).expect("Invalid Genesis address"),
+            crypto::address_to_pubkey_hash(&constant::QXBAO_ADDRESS)
+                .expect("Invalid Genesis address"),
             constant::BASE_REWARD,
+            Some(constant::GENESIS_BLOCK_MSG.to_string()),
         );
-        
+
         let mut gb = Self {
             header: BlockHeader {
                 version: constant::COCONUT_VERSION,
@@ -81,7 +82,7 @@ impl Block {
         crypto::compute_sha256x2(&serialized)
     }
 
-    pub fn mine(&mut self, bits: u32) -> Result<(), error::BlockchainError> {
+    pub fn mine_nonce(&mut self, bits: u32) -> Result<(), error::BlockchainError> {
         self.set_merkle_root();
         let header_buffer = bincode2::serialize(&self.header).expect("Failed to serialize transactions");
         let nonce_pos = header_buffer.len() - 8;
@@ -90,9 +91,9 @@ impl Block {
         let num_threads = rayon::current_num_threads() as u64;
         let chunk_size: u64 = u64::MAX / num_threads;
         let target = crypto::bits_to_target(bits);
-        
+
         println!("Mining with {} threads...", num_threads);
-        
+
         (0..num_threads).into_par_iter().for_each(|thread_id| {
             let mut local_header = header_buffer.clone();
             let start_nonce = thread_id as u64 * chunk_size;
@@ -102,8 +103,7 @@ impl Block {
                 (thread_id as u64 + 1) * chunk_size
             };
             for nonce in start_nonce..end_nonce {
-                // TODO: Magic number, move to constant later
-                if nonce & 1023 == 0 && is_found.load(Ordering::Relaxed) {
+                if nonce & constant::MINING_THREAD_BREAK_INTERVAL == 0 && is_found.load(Ordering::Relaxed) {
                     break;
                 }
                 local_header[nonce_pos..nonce_pos + 8].copy_from_slice(&nonce.to_le_bytes());
@@ -126,11 +126,23 @@ impl Block {
             }
         });
         if !is_found.load(Ordering::Acquire) {
-            // TODO: Thay đổi strategy nếu không tìm thấy nonce hợp lệ (tăng time) hoặc return Result<(), MiningError>
             return Err(error::BlockchainError::MiningFailed);
         }
         self.header.nonce = result_nonce.load(Ordering::Acquire);
         Ok(())
+    }
+
+    pub fn mine(&mut self, bits: u32) -> Result<(), error::BlockchainError> {
+        loop {
+            match self.mine_nonce(bits) {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    println!("Mining attempt failed: {:?}, incrementing timestamp and retrying...", e);
+                    self.header.timestamp += 1;
+                    continue;
+                }
+            }
+        }
     }
 
     pub fn verify(&self) -> bool {
@@ -142,7 +154,11 @@ impl Block {
         }
 
         if hash > target {
-            println!("Block hash does not meet the target requirement. Hash: {}, Target: {}", crypto::to_hex(hash), crypto::to_hex(target));
+            println!(
+                "Block hash does not meet the target requirement. Hash: {}, Target: {}",
+                crypto::to_hex(hash),
+                crypto::to_hex(target)
+            );
             return false;
         }
 
@@ -152,7 +168,10 @@ impl Block {
             return false;
         }
 
-        // TODO: Verify transactions
+        if self.transactions.is_empty() || !self.transactions[0].is_coinbase() {
+            return false;
+        }
+
         true
     }
 }
@@ -165,7 +184,9 @@ mod block_tests {
     fn test_genesis_block_mining() {
         let mut genesis_block = Block::new_genesis();
         let bits = crypto::target_to_bits(constant::MAX_TARGET);
-        genesis_block.mine(bits).expect("Failed to mine genesis block");
+        genesis_block
+            .mine(bits)
+            .expect("Failed to mine genesis block");
         let hash = genesis_block.hash();
         let target = crypto::bits_to_target(bits);
         println!("Block information: {:?}", genesis_block);
@@ -186,18 +207,25 @@ mod block_tests {
         let genesis_block = Block::new_genesis();
         let hash = genesis_block.hash();
         let hash_hex = crypto::to_hex(hash);
-        
+
         println!("Genesis Block Hash: {}", hash_hex);
         println!("Expected Hash: {}", constant::GENESIS_BLOCK_HASH);
-        
-        assert_eq!(hash_hex, constant::GENESIS_BLOCK_HASH, "Genesis block hash must match the hardcoded constant");
+
+        assert_eq!(
+            hash_hex,
+            constant::GENESIS_BLOCK_HASH,
+            "Genesis block hash must match the hardcoded constant"
+        );
     }
 
     #[test]
     fn test_modified_genesis_block_should_fail() {
         let mut genesis_block = Block::new_genesis();
         genesis_block.header.nonce += 1;
-        
-        assert!(!genesis_block.verify(), "Modified genesis block should be invalid");
+
+        assert!(
+            !genesis_block.verify(),
+            "Modified genesis block should be invalid"
+        );
     }
 }
